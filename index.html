@@ -675,23 +675,24 @@
         </div>
         <div class="field">
           <label for="margem">Margem de lucro desejada (%)</label>
-          <div class="input-row"><input type="number" id="margem" step="1" value="50"></div>
-          <div class="hint">Fatia do preço final que fica de lucro.</div>
+          <div class="input-row"><input type="number" id="margem" step="1" value="100"></div>
+          <div class="hint">Lucro = esse % sobre filamento, energia, máquina e reserva. Materiais extras, mão de obra, embalagem e taxas ficam fora da margem.</div>
           <div class="chips">
-            <button class="chip" type="button" data-margem="10">10%</button>
-            <button class="chip" type="button" data-margem="20">20%</button>
             <button class="chip" type="button" data-margem="30">30%</button>
             <button class="chip" type="button" data-margem="40">40%</button>
             <button class="chip" type="button" data-margem="50">50%</button>
             <button class="chip" type="button" data-margem="60">60%</button>
             <button class="chip" type="button" data-margem="70">70%</button>
+            <button class="chip" type="button" data-margem="80">80%</button>
+            <button class="chip" type="button" data-margem="90">90%</button>
+            <button class="chip" type="button" data-margem="100">100%</button>
           </div>
         </div>
       </div>
 
       <div class="panel results">
         <h2>Resultado</h2>
-        <div class="aviso" id="aviso-margem">⚠️ Taxas + margem somam 100% ou mais — ajuste os valores para calcular um preço válido.</div>
+        <div class="aviso" id="aviso-margem">⚠️ Taxas da venda em 100% ou mais — ajuste o valor para calcular um preço válido.</div>
         <div class="row"><span class="label">Filamento</span><span class="value" id="r-filamento">R$ 0,00</span></div>
         <div class="row"><span class="label">Energia</span><span class="value" id="r-energia">R$ 0,00</span></div>
         <div class="row"><span class="label">Uso da máquina</span><span class="value" id="r-maquina">R$ 0,00</span></div>
@@ -699,7 +700,7 @@
         <div class="row"><span class="label">Embalagem</span><span class="value" id="r-embalagem">R$ 0,00</span></div>
         <div class="row"><span class="label">Materiais extras</span><span class="value" id="r-extras">R$ 0,00</span></div>
         <div class="row"><span class="label">Subtotal</span><span class="value" id="r-subtotal">R$ 0,00</span></div>
-        <div class="row"><span class="label">Reserva de perdas (5%)</span><span class="value" id="r-reserva">R$ 0,00</span></div>
+        <div class="row"><span class="label" id="l-reserva">Reserva de perdas (10%)</span><span class="value" id="r-reserva">R$ 0,00</span></div>
         <div class="row total"><span class="label">Custo de produção</span><span class="value" id="r-cp">R$ 0,00</span></div>
         <div class="row"><span class="label">Taxas da venda</span><span class="value" id="r-taxas">R$ 0,00</span></div>
         <div class="row"><span class="label">Margem de lucro</span><span class="value" id="r-margem">R$ 0,00</span></div>
@@ -776,6 +777,8 @@
     { label: "PETG Basic", preco: 119.90 },
     { label: "PLA Silk", preco: 139.90 },
   ];
+
+  const RESERVA_PERDAS = 0.10; // altere aqui (ex.: 0.05); o rótulo acompanha
 
   const el = (id) => document.getElementById(id);
   const materialSelect = el("material");
@@ -994,20 +997,24 @@
     const usoMaquina = baseSemMaquina * 0.20;
     el("uso-maquina").value = fmt(usoMaquina);
 
-    // Custo de produção: (F + E + M + MO + EMB + EX) × 1,05
+    // Custo de produção: (F + E + M + MO + EMB + EX) + reserva
     const subtotal = baseSemMaquina + usoMaquina;
-    const reserva = subtotal * 0.10;
+    const reserva = subtotal * RESERVA_PERDAS;
     const custoProducao = subtotal + reserva;
 
-    // Preço de venda: CP ÷ (1 − taxas − margem)
-    const fatorDivisor = 1 - taxas / 100 - margem / 100;
+    // Margem de lucro incide só sobre filamento, energia, máquina e reserva.
+    // Materiais extras, mão de obra e embalagem entram por fora (sem margem)
+    // e as taxas da venda são cobradas sobre o preço final, sem comer a margem.
+    const porFora = extras + mao + embalagem;
+    const baseMargem = custoProducao - porFora;
     let avisoDivisor = false;
     let precoVenda;
-    if (fatorDivisor <= 0) {
+    if (taxas >= 100) {
       avisoDivisor = true;
       precoVenda = custoProducao;
     } else {
-      precoVenda = custoProducao / fatorDivisor;
+      const precoAntesTaxas = baseMargem * (1 + margem / 100) + porFora;
+      precoVenda = precoAntesTaxas / (1 - taxas / 100);
     }
     const valorTaxas = precoVenda * (taxas / 100);
     const valorMargem = Math.max(0, precoVenda - custoProducao - valorTaxas);
@@ -1113,7 +1120,7 @@
     el("extras").value = "0";
     el("mao").value = "1.00";
     el("taxas").value = "0";
-    el("margem").value = "50";
+    el("margem").value = "100";
     el("qtd-pecas").value = "1";
     materialSelect.value = 0;
     precoSeguiuAutomatico = true;
@@ -1175,7 +1182,7 @@ Mão de obra: ${fmt(r.mao)}
 Embalagem: ${fmt(r.embalagem)}
 Materiais extras: ${fmt(r.extras)}
 Subtotal: ${fmt(r.subtotal)}
-Reserva de perdas (5%): ${fmt(r.reserva)}
+Reserva de perdas (${Math.round(RESERVA_PERDAS * 100)}%): ${fmt(r.reserva)}
 Custo de produção: ${fmt(r.custoProducao)}
 Taxas da venda: ${fmt(r.valorTaxas)}
 Margem de lucro: ${fmt(r.valorMargem)}
@@ -1190,6 +1197,7 @@ Preço de venda: ${fmt(r.precoVenda)}`;
     }
   });
 
+  el("l-reserva").textContent = `Reserva de perdas (${Math.round(RESERVA_PERDAS * 100)}%)`;
   calcular();
 </script>
 </body>
